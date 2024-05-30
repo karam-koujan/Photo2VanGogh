@@ -7,6 +7,6 @@ Turn your photos into amazing artworks in the style of Vincent van Gogh with our
   <img src="results/generatedimages.png" width="45%" />
 </div>
 <div align="center">
-  <img src="results/marrakech.png" width="45%" />
+  <img src="results/marrakech.jpeg" width="45%" />
   <img src="results/marrakechpainting.png" width="45%" />
 </div>
