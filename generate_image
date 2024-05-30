@@ -1,0 +1,68 @@
+#!/usr/bin/python3
+
+import os 
+import shutil
+import argparse
+import torch 
+import sys 
+from dataset import EvalImageDataset
+from torch.utils.data import DataLoader 
+from models import GeneratorResNet 
+import torchvision.transforms as transforms
+from torchvision.utils import save_image
+
+
+path = os.path.join(os.path.dirname(__file__),"images")
+
+if (not os.path.exists(path) or  not os.path.isdir(path)) :
+         print("Please create images directory to put the image you want to generate")
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--fileName",type=str, required=True, help="Name of the file with the extention")
+parser.add_argument("--weightsFile",type=str, required=True, help="the weights file")
+parser.add_argument("--cuda", action='store_true', help="generate using the GPU if available")
+opt = parser.parse_args()
+
+path = path.join(path, opt.fileName)
+transforms_ = [ transforms.ToTensor(),
+                transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
+dataloader = DataLoader(
+        EvalImageDataset(root= path,transforms_= "",singleImg=True),
+        batch_size = 1 
+)
+device = 'cpu'
+
+
+input_shape =  (3,256,256)
+n_residual_blocks = 9 # suggested default, number of residual blocks in generator
+
+model  = GeneratorResNet(input_shape, n_residual_blocks)
+
+if torch.cuda.is_available() and not opt.cuda:
+    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
+
+if opt.cuda:
+    model.cuda()
+
+
+model.load_state_dict(torch.load(opt.weightsFile))
+model.eval()
+
+for i, batch in enumerate(dataloader):
+    real_B = batch.to(device)
+
+    fake_A = 0.5*(model(real_B).data + 1.0)
+
+    # Save image files
+    save_image(fake_A, f'results/{i+1}d.png')
+
+    sys.stdout.write(f'\rGenerated images {i+1} of {dataloader}' )
+
+sys.stdout.write('\n')
+
+
+
+
+
+

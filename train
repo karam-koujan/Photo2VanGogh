@@ -1,0 +1,239 @@
+#!/usr/bin/python3
+
+import torch 
+import wandb
+import argparse
+from PIL import Image
+import itertools
+import numpy as np 
+import torch.nn as nn 
+from torch.utils.data import Dataset,DataLoader
+import torchvision.transforms as transforms 
+from torchvision.utils import make_grid
+from tqdm.notebook import tqdm
+from models import GeneratorResNet,Discriminator
+from utils import ReplayBuffer,weights_init_normal,LambdaLR,ShowImages
+from dataset import ImageDataset
+from torch.optim import Adam,lr_scheduler
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
+parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs of training')
+parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
+parser.add_argument('--valBatchSize', type=int, default=5, help='size of the batches in validation dataset')
+parser.add_argument('--dataroot', type=str, default='datasets/vangogh2photo/', help='dataroot directory of the dataset')
+parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate')
+parser.add_argument('--b1', type=float, default=0.5,help='initial beta1 for adam optimizer')
+parser.add_argument('--b2', type=float, default=0.999,help='initial beta2 for adam optimizer')
+parser.add_argument('--decay_epoch', type=int, default=100, help='epoch to start linearly decaying the learning rate to 0')
+parser.add_argument('--size', type=int, default=256, help='size of the data crop (squared assumed)')
+parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')
+parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
+parser.add_argument('--cuda', action='store_true', help='use GPU computation')
+parser.add_argument('--n_cpu', type=int, default=4, help='number of cpu threads to use during batch generation')
+parser.add_argument('--scalingoutput', type=int, default=500,help="the desired scaling dimension of the output image")
+parser.add_argument('--wandbProjectName', type=str, default='vangogh2photo', help='the name of the project in weight and biases')
+opt = parser.parse_args()
+print("parser options",opt)
+
+
+if torch.cuda.is_available() and not opt.cuda:
+    print("WARNING: You have a CUDA device, so you should probably run with --cuda")
+
+
+
+wandb.login()
+
+wandb.init(project=opt.wandbProjectName)
+
+
+criterion_GAN = torch.nn.MSELoss()
+criterion_cycle = torch.nn.L1Loss()
+criterion_identity = torch.nn.L1Loss()
+
+
+input_shape = (opt.input_nc, opt.size, opt.sizd) # (3,256,256)
+n_residual_blocks = 9 # suggested default, number of residual blocks in generator
+
+G_AB = GeneratorResNet(input_shape, n_residual_blocks)
+G_BA = GeneratorResNet(input_shape, n_residual_blocks)
+D_A = Discriminator(input_shape)
+D_B = Discriminator(input_shape)
+
+cuda = torch.cuda.is_available()
+
+
+if opt.cuda:
+    device = torch.device("cuda")
+    G_AB = G_AB.cuda()
+    G_BA = G_BA.cuda()
+    D_A = D_A.cuda()
+    D_B = D_B.cuda()
+    
+    criterion_GAN.cuda()
+    criterion_cycle.cuda()
+    criterion_identity.cuda()
+else : 
+     device = torch.device("cpu")  
+G_AB.apply(weights_init_normal)
+G_BA.apply(weights_init_normal)
+D_A.apply(weights_init_normal)
+D_B.apply(weights_init_normal)
+
+optimizer_G = Adam(
+    itertools.chain(G_AB.parameters(), G_BA.parameters()), lr=opt.lr, betas=(opt.b1,opt.b2)
+)
+
+optimizer_D_A = Adam(
+    D_A.parameters(), lr=opt.lr, betas=(opt.b1,opt.b2)
+)
+optimizer_D_B = Adam(
+    D_B.parameters(), lr=opt.lr, betas=(opt.b1,opt.b2)
+)
+
+
+lr_scheduler_G = lr_scheduler.LambdaLR(
+    optimizer_G,
+    lr_lambda=LambdaLR(opt.n_epochs, opt.epoch, opt.decay_epoch).step
+)
+
+lr_scheduler_D_A = lr_scheduler.LambdaLR(
+    optimizer_D_A,
+    lr_lambda=LambdaLR(opt.n_epochs, opt.epoch, opt.decay_epoch).step
+)
+lr_scheduler_D_B = lr_scheduler.LambdaLR(
+    optimizer_D_B,
+    lr_lambda=LambdaLR(opt.n_epochs, opt.epoch, opt.decay_epoch).step
+)
+
+img_height = opt.size 
+img_width =  opt.size
+ 
+transforms_ = [
+    transforms.Resize(int(img_height*1.12), Image.BICUBIC),
+    transforms.RandomCrop((img_height, img_width)),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+]
+
+dataloader = DataLoader(
+    ImageDataset(opt.dataroot, transforms_=transforms_),
+    batch_size=opt.batchSize,
+    shuffle=True,
+    num_workers=opt.n_cpu 
+)
+val_dataloader = DataLoader(
+    ImageDataset(opt.dataroot, transforms_=transforms_, mode='val'),
+    batch_size=opt.valBatchSize,
+    shuffle=True,
+    num_workers=opt.n_cpu 
+)
+
+fake_A_buffer = ReplayBuffer()
+fake_B_buffer = ReplayBuffer()
+ImageLogging = ShowImages(G_AB=G_AB,G_BA=G_BA,dataloader=val_dataloader,device=device)
+
+for epoch in range(opt.epoch, opt.n_epochs):
+    for i, batch in enumerate(tqdm(dataloader)):
+        
+        # Set model input
+        real_A = batch['A'].to(device)
+        real_B = batch['B'].to(device)
+        
+        # Adversarial ground truths
+        valid = np.ones((real_A.size(0), *D_A.output_shape)).to(device) # requires_grad = False. Default.
+        fake = np.zeros((real_A.size(0), *D_A.output_shape)).to(device) # requires_grad = False. Default.
+
+        # -----------------
+        # Train Generators
+        # -----------------
+        G_AB.train() # train mode
+        G_BA.train() # train mode
+        
+        # Zero gradients
+        optimizer_G.zero_grad() # Integrated optimizer(G_AB, G_BA)
+        
+        # Identity Loss
+        loss_id_A = criterion_identity(G_BA(real_A), real_A) # If you put A into a generator that creates A with B,
+        loss_id_B = criterion_identity(G_AB(real_B), real_B) # then of course A must come out as it is.
+                                                             # Taking this into consideration, add an identity loss that simply compares 'A and A' (or 'B and B').
+        loss_identity = (loss_id_A + loss_id_B) / 2
+        # GAN Loss
+        fake_B = G_AB(real_A) # fake_B is fake-photo that generated by real monet-drawing
+        loss_GAN_AB = criterion_GAN(D_B(fake_B), valid) # tricking the 'fake-B' into 'real-B'
+        fake_A = G_BA(real_B)
+        loss_GAN_BA = criterion_GAN(D_A(fake_A), valid) # tricking the 'fake-A' into 'real-A'
+        
+        loss_GAN = (loss_GAN_AB + loss_GAN_BA) / 2
+        
+        # Cycle Loss
+        recov_A = G_BA(fake_B) # recov_A is fake-monet-drawing that generated by fake-photo
+        loss_cycle_A = criterion_cycle(recov_A, real_A) # Reduces the difference between the restored image and the real image
+        recov_B = G_AB(fake_A)
+        loss_cycle_B = criterion_cycle(recov_B, real_B)
+        
+        loss_cycle = (loss_cycle_A + loss_cycle_B) / 2
+        
+        # ------> Total Loss
+        loss_G = loss_GAN + (10.0 * loss_cycle) + (5.0 * loss_identity) # multiply suggested weight(default cycle loss weight : 10, default identity loss weight : 5)
+        
+        # Backward pass
+        loss_G.backward()
+        
+        optimizer_G.step()
+        
+        # -----------------
+        # Train Discriminator A
+        # -----------------
+        optimizer_D_A.zero_grad()
+        fake_A = fake_A_buffer.push_and_pop(fake_A)
+        loss_real = criterion_GAN(D_A(real_A), valid) # train to discriminate real images as real
+        loss_fake = criterion_GAN(D_A(fake_A.detach()), fake) # train to discriminate fake images as fake
+        
+        loss_D_A = (loss_real + loss_fake) / 2
+        
+        # Backward pass
+        loss_D_A.backward()
+        
+        # Step the optimizer every accumulation_steps
+        #if (i + 1) % accumulation_steps == 0:
+        optimizer_D_A.step()
+        
+        # -----------------
+        # Train Discriminator B
+        # -----------------
+        optimizer_D_B.zero_grad()
+        fake_B = fake_B_buffer.push_and_pop(fake_B)
+        loss_real = criterion_GAN(D_B(real_B), valid) # train to discriminate real images as real
+        loss_fake = criterion_GAN(D_B(fake_B.detach()), fake) # train to discriminate fake images as fake
+        
+        loss_D_B = (loss_real + loss_fake) / 2
+        
+        # Backward pass
+        loss_D_B.backward()
+        
+        optimizer_D_B.step()
+        
+        # ------> Total Loss
+        loss_D = (loss_D_A + loss_D_B) / 2
+        
+       
+        wandb.log({"D_B_loss": loss_D_B,"D_A_loss": loss_D_A,"loss_G":loss_G,"loss_D":loss_D,"epoch":epoch})
+
+   
+    lr_scheduler_G.step()
+    lr_scheduler_D_A.step()
+    lr_scheduler_D_B.step()
+    ImageLogging.log_generated_images(epoch)
+    if (epoch + 1 ) %  (opt.n_epochs // 4 ) == 0 and not epoch+1 == opt.n_epochs : 
+               torch.save(G_BA.state_dict(), f'G_BA_state_dict_{epoch}.pth')
+               torch.save(G_AB.state_dict(), f'G_AB_state_dict_{epoch}.pth')
+               wandb.save(f"G_BA_state_dict_{epoch}.pth")
+               wandb.save(f"G_AB_state_dict_{epoch}.pth")
+    else : 
+               torch.save(G_BA.state_dict(), 'G_BA_state_dict.pth')
+               torch.save(G_AB.state_dict(), 'G_AB_state_dict.pth')
+               wandb.save("G_BA_state_dict.pth")
+               wandb.save("G_AB_state_dict.pth")

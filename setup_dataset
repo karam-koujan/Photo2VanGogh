@@ -1,0 +1,56 @@
+#!/usr/bin/python3
+
+
+import os 
+import glob
+import argparse
+import random 
+import shutil
+
+random.seed(42)
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument("--val",default=0.1,type=int,help="the percentage of validation dataset")
+parser.add_argument("--test",default=0.1,type=int,help="the percentage of test dataset")
+parser.add_argument("--dataset_name", default="vangogh2photo",type=str, help="the name of the dataset you downloaded")
+opt = parser.parse_args()
+
+path = os.path.join(os.path.dirname(__file__),"datasets",opt.dataset_name)
+url = "https://www.kaggle.com/datasets/srrrrr/vangogh2photo"
+if not os.path.exists(path) or not os.path.isdir(path):
+            print(f"There is no dataset named {opt.dataset_name}, please download from this {url}")
+
+datasets  = ["val","test"]
+labels = ("A","B")
+for dataset in datasets: 
+         for label in labels :
+                  new_dir_path =  os.path.join(path, f"{dataset}{label}")
+                  os.makedirs(new_dir_path)
+
+
+for label in labels : 
+                   pattern = os.path.join(path,f"train{label}","*.*")
+                   files = glob.glob(pattern,recursive=True)
+                   val_size =  int(len(files)*opt.val)
+                   test_size = int(len(files)*opt.test) 
+                   train_size = len(files)  - val_size  - test_size 
+                   random.shuffle(files)
+                   val = files[train_size:train_size + val_size]
+                   test  = files[train_size + val_size:]
+                   print(f"val{label} size", len(val))
+                   print(f"test{label} size", len(test))
+                   
+                   for file in val : 
+                           shutil.move(os.path.join(path,f"train{label}",file),os.path.join(path,f"val{label}"))
+                   for file in test : 
+                           shutil.move(os.path.join(path,f"train{label}",file),os.path.join(path,f"test{label}"))        
+
+print("The setup was completed successfully.")         
+
+                              
+        
+
+
+
+
