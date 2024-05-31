@@ -18,17 +18,19 @@ if (not os.path.exists(path) or  not os.path.isdir(path)) :
          print("Please create images directory to put the image you want to generate")
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--fileName",type=str, required=True, help="Name of the file with the extention")
 parser.add_argument("--weightsFile",type=str, required=True, help="the weights file")
 parser.add_argument("--cuda", action='store_true', help="generate using the GPU if available")
+parser.add_argument('--n_cpu', type=int, default=1, help='number of cpu threads to use during batch generation')
+
 opt = parser.parse_args()
 
-path = path.join(path, opt.fileName)
+#path = os.path.join(path, opt.fileName)
 transforms_ = [ transforms.ToTensor(),
                 transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
 dataloader = DataLoader(
-        EvalImageDataset(root= path,transforms_= "",singleImg=True),
-        batch_size = 1 
+        EvalImageDataset(root= path,transforms_= transforms_),
+        batch_size = 1 ,
+        num_workers=opt.n_cpu 
 )
 device = 'cpu'
 
@@ -41,23 +43,25 @@ model  = GeneratorResNet(input_shape, n_residual_blocks)
 if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-
+map_location = torch.device(device)
 if opt.cuda:
+    device = "cuda"
     model.cuda()
+    map_location = torch.device(device)
 
 
-model.load_state_dict(torch.load(opt.weightsFile))
+model.load_state_dict(torch.load(opt.weightsFile, map_location= map_location))
 model.eval()
 
-for i, batch in enumerate(dataloader):
+for i, batch in enumerate():
     real_B = batch.to(device)
 
     fake_A = 0.5*(model(real_B).data + 1.0)
 
     # Save image files
-    save_image(fake_A, f'results/{i+1}d.png')
+    save_image(fake_A, os.path.join(os.path.dirname(__file__),f'{i+1}.png'))
 
-    sys.stdout.write(f'\rGenerated images {i+1} of {dataloader}' )
+    sys.stdout.write(f'\rGenerated images {i+1} of {len(dataloader)}' )
 
 sys.stdout.write('\n')
 
