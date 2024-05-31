@@ -51,7 +51,7 @@ if opt.cuda:
 model.load_state_dict(torch.load(opt.weightsFile, map_location= map_location))
 model.eval()
 
-for i, batch in enumerate():
+for i, batch in enumerate(dataloader):
     real_B = batch.to(device)
 
     fake_A = 0.5*(model(real_B).data + 1.0)
