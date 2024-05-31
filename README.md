@@ -2,8 +2,8 @@
 
 Turn your photos into amazing artworks in the style of Vincent van Gogh with our Photo2VanGogh. This project uses the CycleGAN deep learning model to add van Gogh's unique brushstrokes and colors to your pictures.
 
-<img src="results/realimages.png" />
-<img src="results/generatedimages.png"/>
+<img src="demo/realimages.png" />
+<img src="demo/generatedimages.png"/>
 
 ## Requirements
 
@@ -19,15 +19,18 @@ pip install -r requirements.txt
 
 To transform your photos into the Van Gogh style, follow these steps:
 
-1. Create a directory for your images:
+1. **Download the model weights**:
+   Download the model weights from [this Google Drive link](https://drive.google.com/file/d/1LS9hi2JXpZMaq2OVzic8gCqKTt9mzNGx/view?usp=sharing).
+
+2. Create a directory for your images:
 
    ```sh
    mkdir images
    ```
 
-2. Add the images you want to transform into the `images` directory.
+3. Add the images you want to transform into the `images` directory.
 
-3. Create a directory for the results:
+4. Create a directory for the results:
 
    ```sh
    mkdir results
@@ -35,13 +38,13 @@ To transform your photos into the Van Gogh style, follow these steps:
 
    This is where the output images will be stored.
 
-4. Make the `generate_image` script executable:
+5. Make the `generate_image` script executable:
 
    ```sh
    chmod +x ./generate_image
    ```
 
-5. Run the `generate_image` script with the appropriate options:
+6. Run the `generate_image` script with the appropriate options:
 
    ```sh
    source ./generate_image --weightsFile <weightsfile name> --n_cpu <number of cpus> [--cuda <if gpu available>]
