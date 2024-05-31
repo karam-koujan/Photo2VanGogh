@@ -7,6 +7,7 @@ import argparse
 import random 
 import shutil
 
+
 random.seed(42)
 
 parser = argparse.ArgumentParser()
@@ -16,22 +17,37 @@ parser.add_argument("--test",default=0.1,type=int,help="the percentage of test d
 parser.add_argument("--dataset_name", default="vangogh2photo",type=str, help="the name of the dataset you downloaded")
 opt = parser.parse_args()
 
+
+
+class DirectoryNotFoundError(Exception):
+    pass
+
+class DirectoryFoundError(Exception):
+    pass
+
+def check_directory_exists(directory_path,message):
+    if not os.path.exists(directory_path) or not os.path.isdir(directory_path):
+        raise DirectoryNotFoundError(message)
+
+def check_directory_not_exists(directory_path,message):
+    if os.path.exists(directory_path) and os.path.isdir(directory_path):
+        raise DirectoryFoundError(message)
 path = os.path.join(os.path.dirname(__file__),"datasets",opt.dataset_name)
 url = "https://www.kaggle.com/datasets/srrrrr/vangogh2photo"
-if not os.path.exists(path) or not os.path.isdir(path):
-            print(f"There is no dataset named {opt.dataset_name}, please download from this {url}")
-
+check_directory_exists(path,f"There is no dataset named '{opt.dataset_name}' please download from the dataset {url}") 
 datasets  = ["val","test"]
 labels = ("A","B")
 for dataset in datasets: 
          for label in labels :
                   new_dir_path =  os.path.join(path, f"{dataset}{label}")
+                  check_directory_not_exists(new_dir_path,f"The directory {dataset}{label} already exists ")
                   os.makedirs(new_dir_path)
 
 
 for label in labels : 
                    pattern = os.path.join(path,f"train{label}","*.*")
                    files = glob.glob(pattern,recursive=True)
+                   print("pattern",pattern,files,)
                    val_size =  int(len(files)*opt.val)
                    test_size = int(len(files)*opt.test) 
                    train_size = len(files)  - val_size  - test_size 
