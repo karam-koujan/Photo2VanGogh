@@ -69,7 +69,7 @@ class ImageDataset(Dataset):
         return self.len_data
     
 
-class EvalImageDataset(Dataset):
+class EvalImageDataset(ImageDataset):
         
         """Dataset class for evaluating image data.
 
@@ -90,11 +90,10 @@ class EvalImageDataset(Dataset):
         def __init__(self,root,transforms_=None,singleImg = False):
               super(EvalImageDataset).__init__()
               self.files_A = self._load_files(os.path.join(root))
-              self.singleImg =  singleImg
               self.root = root 
-              self.transforms_ = transforms_
+              self.transform =  transforms.Compose(transforms_)
         def __getitem__(self, index):
-                image = Image.open(self.files_A[index % len(self.files_A)]) if self.singleImg == False else  Image.open(self.root)
+                image = Image.open(self.files_A[index % len(self.files_A)]) 
                 
                 if image.mode != 'RGB':
                     image = self._to_rgb(image)
@@ -102,7 +101,4 @@ class EvalImageDataset(Dataset):
                 item = self.transform(image)
                 return  item
         def __len__(self) : 
-                 if self.singleImg : 
-                       return 1 
-                 else : 
                       return len(self.files_A)  
