@@ -24,7 +24,6 @@ parser.add_argument('--n_cpu', type=int, default=1, help='number of cpu threads 
 
 opt = parser.parse_args()
 
-#path = os.path.join(path, opt.fileName)
 transforms_ = [ transforms.ToTensor(),
                 transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
 dataloader = DataLoader(
@@ -59,7 +58,7 @@ for i, batch in enumerate():
     fake_A = 0.5*(model(real_B).data + 1.0)
 
     # Save image files
-    save_image(fake_A, os.path.join(os.path.dirname(__file__),f'{i+1}.png'))
+    save_image(fake_A, os.path.join(os.path.dirname(__file__),"results",f'{i+1}.png'))
 
     sys.stdout.write(f'\rGenerated images {i+1} of {len(dataloader)}' )
 
