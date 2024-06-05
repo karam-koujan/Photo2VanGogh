@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import axios from "axios";
+import styles from "./page.module.css";
 
 const ImageUploader = () => {
   const [selectedFile, setSelectedFile] = useState(null);
@@ -55,32 +56,44 @@ const ImageUploader = () => {
   };
 
   return (
-    <div>
-      <input type="file" accept="image/jpeg" onChange={handleFileChange} />
-      <button onClick={handleUpload} disabled={loading}>
-        {loading ? "Uploading..." : "Upload Image"}
-      </button>
-      {selectedFile && (
-        <div>
-          <h2>Selected Image:</h2>
-          <img
-            src={URL.createObjectURL(selectedFile)}
-            alt="Selected"
-            style={{ maxWidth: "100%" }}
-          />
-        </div>
-      )}
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      {serverImage && (
-        <div>
-          <h2>Received Image from Server:</h2>
-          <img
-            src={serverImage}
-            alt="From server"
-            style={{ maxWidth: "100%" }}
-          />
-        </div>
-      )}
+    <div className={styles.transformImg}>
+      <div className={styles.uploadContainer}>
+        <input type="file" accept="image/jpeg" onChange={handleFileChange} />
+        <button
+          onClick={handleUpload}
+          className={styles.button}
+          disabled={loading}
+        >
+          {loading ? "Transforming..." : "Transform Photo"}
+        </button>
+      </div>
+      <div className={styles.imgContainer}>
+        {selectedFile ? (
+          <div>
+            <h2>Selected Photo:</h2>
+            <img
+              src={URL.createObjectURL(selectedFile)}
+              alt="Selected"
+              style={{ maxWidth: "100%" }}
+            />
+          </div>
+        ) : (
+          <div className={styles.placeholder}></div>
+        )}
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        {serverImage ? (
+          <div>
+            <h2>Painting:</h2>
+            <img
+              src={serverImage}
+              alt="painting"
+              style={{ maxWidth: "100%" }}
+            />
+          </div>
+        ) : (
+          <div className={styles.placeholder}></div>
+        )}
+      </div>
     </div>
   );
 };
